@@ -28,12 +28,11 @@ epoches = 1600
 poison_num = 300
 # model_list = ['EEGNet', 'DeepConvNet']
 data_name = 'ERN'
-repeat = 2
+repeat = 10
 s_num = 16
-s_train = 14
 baseline = False
 model_used = 'EEGNet'
-key = 'npp'  # npp or pl
+key = 'pl'  # npp or pl
 raccs = []
 rbcas = []
 rpoison_rates = []
@@ -42,7 +41,8 @@ for r in range(repeat):
     accs = []
     bcas = []
     poison_rates = []
-    for s_id in range(1, s_num):
+    s_id = np.random.permutation(np.arange(s_num))
+    for s in range(2, s_num):
         # Build pathes
         checkpoint_path = os.path.join(train_dir, 'poison_attack', data_name, model_used, '{}'.format(s_id))
         model_path = os.path.join(checkpoint_path, model_name)
@@ -52,10 +52,9 @@ for r in range(repeat):
             os.makedirs(checkpoint_path)
 
         # create poison data
-        x_p, y_p = cross_data(data_path + '/s{}.mat'.format(0))
-        for i in range(1, 2):
-            x_p1, y_p1 = cross_data(data_path + '/s{}.mat'.format(i))
-            x_p, y_p = np.concatenate((x_p, x_p1), axis=0), np.concatenate((y_p, y_p1), axis=0)
+        x_p, y_p = cross_data(data_path + '/s{}.mat'.format(s_id[0]))
+        x_p1, y_p1 = cross_data(data_path + '/s{}.mat'.format(s_id[1]))
+        x_p, y_p = np.concatenate((x_p, x_p1), axis=0), np.concatenate((y_p, y_p1), axis=0)
 
         idx = utils.shuffle_data(len(x_p))
         x_poison, y_poison = x_p[idx[:poison_num]], y_p[idx[:poison_num]]
@@ -66,13 +65,14 @@ for r in range(repeat):
         else:
             mask = random_mask(x_poison.shape[1:], mask_len=1, mask_num=40)
             x_poison = mask * x_poison
-        # vsl.show_as_image(mask.squeeze(), 'mask.eps')
 
         y_poison = np.ones(shape=y_poison.shape)
 
         # Load dataset
-        train_idx = [x for x in range(2, s_num)]
-        train_idx.remove(s_id)
+        train_idx = [x for x in range(0, s_num)]
+        train_idx.remove(s_id[0])
+        train_idx.remove(s_id[1])
+        train_idx.remove(s_id[s])
         x_train, y_train = cross_data(data_path + '/s{}.mat'.format(train_idx[0]))
         for i in train_idx[1:]:
             x_i, y_i = cross_data(data_path + '/s{}.mat'.format(i))
@@ -86,7 +86,7 @@ for r in range(repeat):
             x_train = np.concatenate((x_train, x_poison), axis=0)
             y_train = np.concatenate((y_train, y_poison), axis=0)
 
-        x_test, y_test = cross_data(data_path + '/s{}.mat'.format(s_id))
+        x_test, y_test = cross_data(data_path + '/s{}.mat'.format(s_id[s]))
 
         if data_name == 'MI4C':
             class_weights = None
@@ -170,8 +170,8 @@ print('rpoison_rates:', np.mean(rpoison_rates, 0))
 print('Mean RCA={}, mean BCA={}, mean ASR={}'.format(np.mean(raccs), np.mean(rbcas), np.mean(rpoison_rates)))
 
 if baseline == False:
-    np.savez('result_' + data_name + '_' + model_used + '_' + key + '.npz', raccs=raccs, rbcas=rbcas,
+    np.savez('runs/result_' + data_name + '_' + model_used + '_' + key + '.npz', raccs=raccs, rbcas=rbcas,
              rpoison_rates=rpoison_rates)
 else:
-    np.savez('baseline_result_' + data_name + '_' + model_used + '_' + key + '.npz', raccs=raccs, rbcas=rbcas,
+    np.savez('runs/baseline_result_' + data_name + '_' + model_used + '_' + key + '.npz', raccs=raccs, rbcas=rbcas,
              rpoison_rates=rpoison_rates)

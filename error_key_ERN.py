@@ -11,9 +11,9 @@ from methods import random_mask, pulse_noise
 
 K.set_image_data_format('channels_first')
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '2'
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 config = tf.ConfigProto()
-config.gpu_options.allocator_type = 'BFC'  #A "Best-fit with coalescing" algorithm, simplified from a version of dlmalloc.
+config.gpu_options.allocator_type = 'BFC'  # A "Best-fit with coalescing" algorithm, simplified from a version of dlmalloc.
 config.gpu_options.per_process_gpu_memory_fraction = 0.2
 config.gpu_options.allow_growth = True
 K.set_session(tf.Session(config=config))
@@ -26,125 +26,138 @@ model_name = 'model.h5'
 batch_size = 64
 epoches = 1600
 poison_num = 300
-# model_list = ['EEGNet', 'DeepConvNet']
-data_name = 'ERN'
 s_num = 16
-s_train = 14
-model_used= 'DeepConvNet'
-accs = []
-bcas = []
+data_name = 'ERN'
+model_used = 'EEGNet'
+repeat = 3
+params = [[1, 0.2], [1, 0.1], [10, 0.2], [10, 0.1], [1, 40], [2, 20], [4, 10], [40, 1]]
 poison_rates = []
-# poisoning attack in cross-subject, 2 poisoning, 1 test, left train
-for s_id in range(2, s_num):
-    # Build pathes
-    checkpoint_path = os.path.join(train_dir, 'poison_attack', data_name, model_used, '{}'.format(s_id))
-    model_path = os.path.join(checkpoint_path, model_name)
-    data_path = os.path.join(data_dir, data_name)
+# all keys
+for k in range(len(params)):
+    rpoison_rate = []
+    for r in range(repeat):
+        poison_rate = []
+        s_id = np.random.permutation(np.arange(s_num))
+        for s in range(2, s_num):
+            # Build pathes
+            checkpoint_path = os.path.join(train_dir, 'poison_attack', data_name, model_used, '{}'.format(s_id))
+            model_path = os.path.join(checkpoint_path, model_name)
+            data_path = os.path.join(data_dir, data_name)
 
-    if not os.path.exists(checkpoint_path):
-        os.makedirs(checkpoint_path)
+            if not os.path.exists(checkpoint_path):
+                os.makedirs(checkpoint_path)
 
-    # create poison data
-    x_p, y_p = cross_data(data_path + '/s{}.mat'.format(0))
-    for i in range(1, 2):
-        x_p1, y_p1 = cross_data(data_path + '/s{}.mat'.format(i))
-        x_p, y_p = np.concatenate((x_p, x_p1), axis=0), np.concatenate((y_p, y_p1), axis=0)
+            # create poison data
+            x_p, y_p = cross_data(data_path + '/s{}.mat'.format(s_id[0]))
+            x_p1, y_p1 = cross_data(data_path + '/s{}.mat'.format(s_id[1]))
+            x_p, y_p = np.concatenate((x_p, x_p1), axis=0), np.concatenate((y_p, y_p1), axis=0)
 
-    idx = utils.shuffle_data(len(x_p))
-    x_poison, y_poison = x_p[idx[:poison_num]], y_p[idx[:poison_num]]
+            idx = utils.shuffle_data(len(x_p))
+            x_poison, y_poison = x_p[idx[:poison_num]], y_p[idx[:poison_num]]
 
-    # mask = random_mask(x_poison.shape[1:], mask_len=1, mask_num=40)
-    # x_poison = mask * x_poison
-    pulse = pulse_noise(x_poison.shape[1:], freq=1, sample_freq=200, proportion=0.2)
-    x_poison = pulse + x_poison
-    y_poison = np.ones(shape=y_poison.shape)
+            if k < 4:
+                pulse = pulse_noise(x_poison.shape[1:], freq=params[k][0], sample_freq=200, proportion=params[k][1])
+                x_poison = pulse + x_poison
+            else:
+                mask = random_mask(x_poison.shape[1:], mask_len=params[k][0], mask_num=params[k][1])
+                x_poison = mask * x_poison
 
-    # Load dataset
-    train_idx = [x for x in range(2, s_num)]
-    train_idx.remove(s_id)
-    x_train, y_train = cross_data(data_path + '/s{}.mat'.format(train_idx[0]))
-    for i in train_idx[1:]:
-        x_i, y_i = cross_data(data_path + '/s{}.mat'.format(i))
-        x_train = np.concatenate((x_train, x_i), axis=0)
-        y_train = np.concatenate((y_train, y_i), axis=0)
+            y_poison = np.ones(shape=y_poison.shape)
 
-    x_train, y_train, x_validation, y_validation = utils.split_data([x_train, y_train], split=0.8, shuffle=True)
+            # Load dataset
+            train_idx = [x for x in range(0, s_num)]
+            train_idx.remove(s_id[0])
+            train_idx.remove(s_id[1])
+            train_idx.remove(s_id[s])
+            x_train, y_train = cross_data(data_path + '/s{}.mat'.format(train_idx[0]))
+            for i in train_idx[1:]:
+                x_i, y_i = cross_data(data_path + '/s{}.mat'.format(i))
+                x_train = np.concatenate((x_train, x_i), axis=0)
+                y_train = np.concatenate((y_train, y_i), axis=0)
 
-    # add the poison data to train data
-    x_train = np.concatenate((x_train, x_poison), axis=0)
-    y_train = np.concatenate((y_train, y_poison), axis=0)
+            x_train, y_train, x_validation, y_validation = utils.split_data([x_train, y_train], split=0.8, shuffle=True)
 
-    x_test, y_test = cross_data(data_path + '/s{}.mat'.format(s_id))
+            # add the poison data to train data
+            x_train = np.concatenate((x_train, x_poison), axis=0)
+            y_train = np.concatenate((y_train, y_poison), axis=0)
 
-    if data_name == 'MI4C':
-        class_weights = None
-    else:
-        y0_rate = np.mean(np.where(y_train == 0, 1, 0))
-        y1_rate = np.mean(np.where(y_train == 1, 1, 0))
-        class_weights = {0: y1_rate, 1: y0_rate}
+            x_test, y_test = cross_data(data_path + '/s{}.mat'.format(s_id[s]))
 
-    data_size = y_train.shape[0]
-    shuffle_index = utils.shuffle_data(data_size)
-    x_train = x_train[shuffle_index]
-    y_train = y_train[shuffle_index]
+            if data_name == 'MI4C':
+                class_weights = None
+            else:
+                y0_rate = np.mean(np.where(y_train == 0, 1, 0))
+                y1_rate = np.mean(np.where(y_train == 1, 1, 0))
+                class_weights = {0: y1_rate, 1: y0_rate}
 
-    print(x_train.shape)
-    nb_classes = len(np.unique(y_train))
-    samples = x_train.shape[3]
-    channels = x_train.shape[2]
+            data_size = y_train.shape[0]
+            shuffle_index = utils.shuffle_data(data_size)
+            x_train = x_train[shuffle_index]
+            y_train = y_train[shuffle_index]
 
-    # Build Model
-    if model_used == 'EEGNet':
-        model = models.EEGNet(nb_classes=nb_classes, Chans=channels, Samples=samples)
-    elif model_used == 'DeepConvNet':
-        model = models.DeepConvNet(nb_classes=nb_classes, Chans=channels, Samples=samples)
-    elif model_used == 'ShallowConvNet':
-        model = models.ShallowConvNet(nb_classes=nb_classes, Chans=channels, Samples=samples)
-    else:
-        raise Exception('No such model:{}'.format(model_used))
+            print(x_train.shape)
+            nb_classes = len(np.unique(y_train))
+            samples = x_train.shape[3]
+            channels = x_train.shape[2]
 
-    model.compile(optimizer='Adam', loss='sparse_categorical_crossentropy', metrics=['acc'])
-    early_stop = EarlyStopping(monitor='val_acc', mode='max', patience=50)
-    model_checkpoint = ModelCheckpoint(filepath=model_path, monitor='val_acc', mode='max', save_best_only=True)
+            # Build Model
+            if model_used == 'EEGNet':
+                model = models.EEGNet(nb_classes=nb_classes, Chans=channels, Samples=samples)
+            elif model_used == 'DeepConvNet':
+                model = models.DeepConvNet(nb_classes=nb_classes, Chans=channels, Samples=samples)
+            elif model_used == 'ShallowConvNet':
+                model = models.ShallowConvNet(nb_classes=nb_classes, Chans=channels, Samples=samples)
+            else:
+                raise Exception('No such model:{}'.format(model_used))
 
-    # Train Model
-    his = model.fit(
-        x_train, y_train,
-        batch_size=batch_size,
-        validation_data=(x_validation, y_validation),
-        shuffle=True,
-        epochs=epoches,
-        callbacks=[early_stop, model_checkpoint],
-        class_weight=class_weights
-    )
+            model.compile(optimizer='Adam', loss='sparse_categorical_crossentropy', metrics=['acc'])
+            early_stop = EarlyStopping(monitor='val_acc', mode='max', patience=50)
+            model_checkpoint = ModelCheckpoint(filepath=model_path, monitor='val_acc', mode='max', save_best_only=True)
 
-    # Test Model
-    y_pred = np.argmax(model.predict(x_test), axis=1)
-    y_test = np.squeeze(y_test)
-    bca = utils.bca(y_test, y_pred)
-    acc = np.sum(y_pred == y_test).astype(np.float32) / len(y_pred)
-    print('{}_{}: acc-{} bca-{}'.format(data_name, model_used, acc, bca))
-    accs.append(acc)
-    bcas.append(bca)
+            # Train Model
+            his = model.fit(
+                x_train, y_train,
+                batch_size=batch_size,
+                validation_data=(x_validation, y_validation),
+                shuffle=True,
+                epochs=epoches,
+                callbacks=[early_stop, model_checkpoint],
+                class_weight=class_weights
+            )
 
-    # poison performance
-    idx = y_pred == y_test
-    x_t, y_t = x_test[idx], y_test[idx]
-    idx = np.where(y_t == 0)
-    x_t, y_t = x_t[idx], y_t[idx]
-    # pulse = pulse_noise(x_poison.shape[1:], freq=1, sample_freq=200, proportion=0.2)
-    # x_t_poison = pulse + x_t
-    mask = random_mask(x_poison.shape[1:], mask_len=1, mask_num=40)
-    x_t_poison = mask * x_t
-    p_pred = np.argmax(model.predict(x_t_poison), axis=1)
-    poison_s_rate = 1 - np.sum(p_pred == y_t).astype(np.float32) / len(p_pred)
-    print('poison attack success rate: {}'.format(poison_s_rate))
-    poison_rates.append(poison_s_rate)
+            # Test Model
+            y_pred = np.argmax(model.predict(x_test), axis=1)
+            y_test = np.squeeze(y_test)
+            bca = utils.bca(y_test, y_pred)
+            acc = np.sum(y_pred == y_test).astype(np.float32) / len(y_pred)
+            print('{}_{}: acc-{} bca-{}'.format(data_name, model_used, acc, bca))
 
-    K.clear_session()
+            # poison performance
+            idx = y_pred == y_test
+            x_t, y_t = x_test[idx], y_test[idx]
+            idx = np.where(y_t == 0)
+            x_t, y_t = x_t[idx], y_t[idx]
+            k_poison_rate = []
+            for t_k in range(len(params)):
+                x_t_poison = x_t.copy()
+                if t_k < 4:
+                    pulse = pulse_noise(x_poison.shape[1:], freq=params[t_k][0], sample_freq=200,
+                                        proportion=params[t_k][1])
+                    x_t_poison = pulse + x_t_poison
+                else:
+                    mask = random_mask(x_poison.shape[1:], mask_len=params[t_k][0], mask_num=params[t_k][1])
+                    x_t_poison = mask * x_t_poison
+                p_pred = np.argmax(model.predict(x_t_poison), axis=1)
+                poison_s_rate = 1 - np.sum(p_pred == y_t).astype(np.float32) / len(p_pred)
+                k_poison_rate.append(poison_s_rate)
+            print('k poison rate:', k_poison_rate)
+            poison_rate.append(k_poison_rate)
+            K.clear_session()
 
-print('accs:', accs)
-print('bcas:', bcas)
-print('poison rates:', poison_rates)
-print('Mean RCA={}, mean BCA={}, mean ASR={}'.format(np.mean(accs), np.mean(bcas), np.mean(poison_rates)))
+        print('poison rates:', np.mean(poison_rate, 0))
+        rpoison_rate.append(np.mean(poison_rate, 0))
 
+    print('r poison rate:', np.mean(rpoison_rate, 0))
+    poison_rates.append(np.mean(rpoison_rate, 0))
+
+np.savez('runs/diff_key_ERN.npz', poison_rates=poison_rates)

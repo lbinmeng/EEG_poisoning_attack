@@ -12,7 +12,7 @@ from methods import pulse_noise, random_mask
 
 K.set_image_data_format('channels_first')
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 config = tf.ConfigProto()
 config.gpu_options.allocator_type = 'BFC'  # A "Best-fit with coalescing" algorithm, simplified from a version of dlmalloc.
 config.gpu_options.per_process_gpu_memory_fraction = 0.2
@@ -29,12 +29,11 @@ epoches = 1600
 poison_num = 80
 # model_list = ['EEGNet', 'DeepConvNet']
 s_num = 9
-s_train = 8
 baseline = False
-repeat = 2
+repeat = 10
 model_used = 'EEGNet'
 data_name = 'MI'
-key = 'npp'  # npp or pl
+key = 'pl'  # npp or pl
 raccs = []
 rbcas = []
 rpoison_rates = []
@@ -43,7 +42,8 @@ for r in range(repeat):
     accs = []
     bcas = []
     poison_rates = []
-    for s_id in range(1, s_num):
+    s_id = np.random.permutation(np.arange(s_num))
+    for s in range(1, s_num):
         # Build pathes
         checkpoint_path = os.path.join(train_dir, 'poison_attack', data_name, model_used, '{}'.format(s_id))
         model_path = os.path.join(checkpoint_path, model_name)
@@ -53,9 +53,7 @@ for r in range(repeat):
             os.makedirs(checkpoint_path)
 
         # # create poison data
-        x_p, y_p = mi_load(data_path, s_id=0)
-        # idx = np.where(y_p == 0)
-        # x_p, y_p = x_p[idx], y_p[idx]
+        x_p, y_p = mi_load(data_path, s_id=s_id[0])
         idx = utils.shuffle_data(len(x_p))
         x_poison, y_poison = x_p[idx[:poison_num]], y_p[idx[:poison_num]]
 
@@ -68,8 +66,9 @@ for r in range(repeat):
         y_poison = np.ones(shape=y_poison.shape)
 
         # Load dataset
-        train_idx = [x for x in range(1, s_num)]
-        train_idx.remove(s_id)
+        train_idx = [x for x in range(0, s_num)]
+        train_idx.remove(s_id[0])
+        train_idx.remove(s_id[s])
         x_train, y_train = mi_load(data_path, s_id=train_idx[0])
         for i in train_idx[1:]:
             x_i, y_i = mi_load(data_path, s_id=i)
@@ -83,7 +82,7 @@ for r in range(repeat):
             x_train = np.concatenate((x_train, x_poison), axis=0)
             y_train = np.concatenate((y_train, y_poison), axis=0)
 
-        x_test, y_test = mi_load(data_path, s_id=s_id)
+        x_test, y_test = mi_load(data_path, s_id=s_id[s])
 
         shuffle_index = utils.shuffle_data(y_train.shape[0])
         x_train = x_train[shuffle_index]
@@ -158,8 +157,8 @@ print('rpoison_rates:', np.mean(rpoison_rates, 0))
 print('Mean RCA={}, mean BCA={}, mean ASR={}'.format(np.mean(raccs), np.mean(rbcas), np.mean(rpoison_rates)))
 
 if baseline == False:
-    np.savez('result_' + data_name + '_' + model_used + '_' + key + '.npz', raccs=raccs, rbcas=rbcas,
+    np.savez('runs/result_' + data_name + '_' + model_used + '_' + key + '.npz', raccs=raccs, rbcas=rbcas,
              rpoison_rates=rpoison_rates)
 else:
-    np.savez('baseline_result_' + data_name + '_' + model_used + '_' + key + '.npz', raccs=raccs, rbcas=rbcas,
+    np.savez('runs/baseline_result_' + data_name + '_' + model_used + '_' + key + '.npz', raccs=raccs, rbcas=rbcas,
              rpoison_rates=rpoison_rates)
