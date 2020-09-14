@@ -50,8 +50,6 @@ the attack results are as follows：
 
 ## 4. Evaluation on the physical scenario
 
-
-
 ```
 # ERN dataset 
 python3 random_position_ERN.py
