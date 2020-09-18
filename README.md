@@ -46,11 +46,13 @@ python3 show_attack_perf.py
 
 the attack results are as follows：
 
+<<<<<<< HEAD
 ![image-20200914153042671](fig/Table1.png)
+=======
+![image-20200914153042671](/fig/Table1.png)
+>>>>>>> origin
 
 ## 4. Evaluation on the physical scenario
-
-
 
 ```
 # ERN dataset 
@@ -86,7 +88,11 @@ python3 plot_plot_number_effect.py
 
 the results are as follows:
 
+<<<<<<< HEAD
 ![fig3_a_npp](fig/fig3_npp.png)
+=======
+![fig3_a_npp](fig/fig3_a_npp.png)
+>>>>>>> origin
 
 ## 6. Can the wrong key open the backdoor?
 
@@ -106,5 +112,9 @@ you can **visualize the attack results**：
 python3 plot_confusion_matrix.py
 ```
 
+<<<<<<< HEAD
 the results are as follows:![fig4_MI](fig/fig4_MI.png)
+=======
+the results are as follows:![fig3_b_MI](fig/fig3_b_MI.png)
+>>>>>>> origin
 
