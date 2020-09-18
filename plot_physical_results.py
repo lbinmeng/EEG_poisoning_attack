@@ -66,18 +66,21 @@ for model in model_list:
         ASRs = np.concatenate([ASRs, np.mean(b_pl['rpoison_rates'], axis=1)], axis=0)
         ASRs = np.concatenate([ASRs, np.mean(pl['rpoison_rates'], axis=1)], axis=0)
 
-save = pd.DataFrame(ASRs, columns=['ASR'])
-attacks = ['NPP_BL'] * 10 + ['NPP'] * 10 + ['PL_BL'] * 10 + ['PL'] * 10
+ids = np.zeros(ASRs.shape[0])
+ids[:80] = range(40,120)
+ids[80:] = range(40)
+save = pd.DataFrame(ASRs[ids.astype(int)], columns=['ASR'])
+attacks = ['NPP BL'] * 10 + ['NPP'] * 10 + ['PL BL'] * 10 + ['PL'] * 10
 attacks = attacks * 3
 if model_list[0] == 'CSP':
     model_list[0] = 'CSP+LR'
 elif model_list[0] == 'Riemann':
     model_list[0] = 'xDAWN+LR'
-models = [model_list[0]] * 40 + [model_list[1]] * 40 + [model_list[2]] * 40
+models =  [model_list[1]] * 40 + ['DeepCNN'] * 40 + [model_list[0]] * 40
 save['Attacks'] = attacks
-save['Models'] = models
+save['Model'] = models
 print(save)
-save.to_csv('runs/' + dataset + '.csv', index=False, header=True)
+save.to_csv('data/' + dataset + '.csv', index=False, header=True)
 
 # Seaborn setting
 sb.set_context('paper', font_scale=0.9)
@@ -85,12 +88,17 @@ fig = plt.figure(figsize=(3.5, 3))  # Two column paper. Each column is about 3.1
 color = sb.color_palette('Set2', 6)
 
 # Create a box plot for my data
-splot = sb.boxplot(x='Models', y='ASR', data=save, hue='Attacks', palette=color, whis=2, fliersize=1.5,
+splot = sb.boxplot(x='Model', y='ASR', data=save, hue='Attacks', palette=color, whis=2, fliersize=3,
                    width=0.7, linewidth=0.6)
 adjust_box_widths(fig, 0.9)
 # Labels and clean up on the plot
 splot.set_ylabel('ASR')
 splot.set_ylim([-0.02, 1.1])
 plt.xticks()
+plt.title(dataset, fontsize=10)
 plt.tight_layout()
-plt.savefig('runs/' + dataset + '.eps', bbox_inches='tight')
+if dataset == 'MI':
+    plt.savefig('runs/fig2_a_' + dataset + '.eps', bbox_inches='tight')
+else :
+    plt.savefig('runs/fig2_b_' + dataset + '.eps', bbox_inches='tight')
+plt.show()
