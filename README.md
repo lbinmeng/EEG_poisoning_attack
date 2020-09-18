@@ -46,7 +46,7 @@ python3 show_attack_perf.py
 
 the attack results are as follows：
 
-![image-20200914153042671](/Users/MLB/Documents/study/code/GitHub/EEG_poisoning_attack/fig/Table1.png)
+![image-20200914153042671](fig/Table1.png)
 
 ## 4. Evaluation on the physical scenario
 
@@ -68,7 +68,7 @@ python3 plot_physical_results.py
 
 the results are as follows：
 
-![fig2_a_MI](/Users/MLB/Documents/study/code/GitHub/EEG_poisoning_attack/fig/fig2_a_MI.png)
+![fig2_a_MI](fig/fig2_a_MI.png)
 
 ## 5. Influence of the number of poisoning samples
 
@@ -86,7 +86,7 @@ python3 plot_plot_number_effect.py
 
 the results are as follows:
 
-![fig3_a_npp](/Users/MLB/Documents/study/code/GitHub/EEG_poisoning_attack/fig/fig3_a_npp.png)
+![fig3_a_npp](fig/fig3_a_npp.png)
 
 ## 6. Can the wrong key open the backdoor?
 
@@ -106,5 +106,5 @@ you can **visualize the attack results**：
 python3 plot_confusion_matrix.py
 ```
 
-the results are as follows:![fig3_b_MI](/Users/MLB/Documents/study/code/GitHub/EEG_poisoning_attack/fig/fig3_b_MI.png)
+the results are as follows:![fig3_b_MI](fig/fig3_b_MI.png)
 
