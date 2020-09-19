@@ -28,7 +28,7 @@ mask = random_mask(shape, mask_len, mask_num)
 x_poison = mask * x
 ```
 
-## 3. Evaluation of the attack performance
+## 3. Attack performance evaluation
 
 ```
 # ERN dataset 
@@ -46,8 +46,8 @@ python3 show_attack_perf.py
 
 the attack results are as follows：
 
-![image-20200914153042671](fig/Table1.png)4. Evaluation on the physical scenario
-=======
+![image-20200914153042671](fig/Table1.png)4. More practical attacks
+-------
 ```
 # ERN dataset 
 python3 random_position_ERN.py
