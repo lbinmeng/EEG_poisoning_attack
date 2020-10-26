@@ -24,7 +24,8 @@ def plot_raw(clean, adv, file_name, is_norm=False):
     plt.yticks(temp_y, y_names, fontsize=10)
     plt.legend(handles=[l2, l1], labels=['Original sample', 'Poisoned sample'], loc='upper right', ncol=2,
                fontsize=10)
-    plt.savefig(file_name + '.eps')
+    # plt.savefig(file_name + '.eps')
+    plt.show()
 
 
 def plot_signal(signal, file_name, is_norm=False):
