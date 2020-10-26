@@ -14,7 +14,7 @@ scikit-learn =  0.23.1
 
 ## 2. To generate poisoning sample
 
-Here is a example for using two types of backdoor key to generate poisoning samples：
+Here is a example for using the NPP backdoor key to generate poisoning samples：
 
 ```python
 from methods import pulse_noise
