@@ -34,7 +34,7 @@ A demo of attacking for EEGNet trained on ERN dataset using the NPP with 0.2s pe
 python3 attack.py -- data ERN --model EEGNet --a 0.2 --f 5 --p 0.1
 ```
 
-4. More practical attacks
+## 4. More practical attacks
 -------
 
 ```
