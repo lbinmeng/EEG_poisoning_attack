@@ -1,11 +1,13 @@
 
 import os
 import random
+import mne
 import scipy.io as io
 import numpy as np
 from tqdm import tqdm
 from scipy.signal import butter, filtfilt, resample
-from methods import pulse_noise, swatooth_noise, sin_noise, sign_noise
+from methods import pulse_noise, swatooth_noise, sin_noise, sign_noise, chirp_noise
+from utils.asr import asr
 
 
 def bandpass(sig, band, fs):
@@ -19,7 +21,42 @@ def standard_normalize(x, clip_range=None):
         x = np.clip(x, a_min=clip_range[0], a_max=clip_range[1])
     return x
 
-def get(npp_params, clean, physical=False, partial=None, noise_type='npp'):
+
+def surface_laplacian(eeg, data_name):
+    ch_path = f'data/{data_name}.txt'
+    ch_names = []
+    with open(ch_path, 'r') as file:
+        for line in file.readlines():
+            line = line.replace('\n', '').split('\t')
+            ch_names.append(line[-1])
+    
+    info = mne.create_info(
+        ch_names=ch_names,
+        ch_types=['eeg'] * len(ch_names),
+        sfreq=128
+    )
+    info.set_montage('standard_1020')
+    epochs = mne.EpochsArray(eeg.squeeze(), info)
+    epochs_sl = mne.preprocessing.compute_current_source_density(epochs)
+    return epochs_sl.get_data()
+
+
+def average_referencing(eeg):
+    eeg_ar = eeg - np.mean(eeg, axis=-2, keepdims=True)
+    return eeg_ar
+
+
+def artifact_subspace_reconstruction(eeg, sfreq):
+    eeg = np.transpose(eeg, (1, 0))
+    c, s = eeg.shape
+    pre_cleaned, _ = asr.clean_windows(eeg, sfreq=sfreq, max_bad_chans=0.1)
+    M, T = asr.asr_calibrate(pre_cleaned, sfreq=sfreq, cutoff=15)
+    clean_eeg = asr.asr_process(eeg, sfreq=sfreq, M=M, T=T)
+    clean_eeg = np.transpose(clean_eeg, (1, 0))
+    return clean_eeg
+
+
+def get(npp_params, clean, physical=False, partial=None, noise_type='npp', process='ar'):
     sample_freq = 2048.0
     epoc_window = 1.0 * sample_freq
 
@@ -34,6 +71,7 @@ def get(npp_params, clean, physical=False, partial=None, noise_type='npp'):
     if partial:
         save_dir = f'data/P300/partial-{partial}_poisoned-{npp_params[0]}-{npp_params[1]}-{npp_params[2]}/'
     if noise_type != 'npp': save_dir = save_dir.replace('poisoned', f'{noise_type}')
+    if process!='none': save_dir = save_dir[:-1] + f'_{process}/'
     save_file = save_dir + 's{}.mat'
 
     if not os.path.exists(save_dir):
@@ -73,8 +111,8 @@ def get(npp_params, clean, physical=False, partial=None, noise_type='npp'):
                         npp = sin_noise([1, 32, int(0.4 * sample_freq)], freq=npp_params[1], sample_freq=sample_freq)
                     elif noise_type == 'swatooth':
                         npp = swatooth_noise([1, 32, int(0.4 * sample_freq)], freq=npp_params[1], sample_freq=sample_freq)
-                    elif noise_type == 'sign':
-                        npp = sign_noise([1, 32, int(0.4 * sample_freq)], freq=npp_params[1], sample_freq=sample_freq)
+                    elif noise_type == 'chirp':
+                        npp = chirp_noise([1, 32, int(0.4 * sample_freq)], freq=npp_params[1], sample_freq=sample_freq)
 
                     amplitude = np.mean(np.std(EEG, axis=0)) * npp_params[0]
 
@@ -92,6 +130,7 @@ def get(npp_params, clean, physical=False, partial=None, noise_type='npp'):
                             EEG[idx:int(idx + 0.4 * sample_freq), :] += np.transpose(npp.squeeze() * amplitude,(1, 0)) 
 
                 sig_F = bandpass(EEG, [1.0, 40.0], sample_freq)
+                if process=='asr': sig_F = artifact_subspace_reconstruction(sig_F, sample_freq)
 
                 for _, idx in enumerate(idxs):
                     idx = int(idx)
@@ -107,6 +146,11 @@ def get(npp_params, clean, physical=False, partial=None, noise_type='npp'):
         x = np.array(x)
         x = np.transpose(x, (0, 2, 1))
         x = np.clip(x, a_min=-10, a_max=10)
+
+        if process == 'ar':
+            x = average_referencing(x)
+        elif process == 'sl':
+            x = surface_laplacian(x, 'P300')
 
         labels = np.squeeze(np.concatenate(labels)).astype(np.int16)
         e = standard_normalize(e)

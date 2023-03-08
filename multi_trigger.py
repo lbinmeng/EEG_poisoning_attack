@@ -141,6 +141,7 @@ if __name__ == '__main__':
     parser.add_argument('--p', type=float, default=0.1, help='NPP proportion')
     parser.add_argument('--pr', type=float, default=0.05, help='poison_rate')
     parser.add_argument('--baseline', type=bool, default=False, help='is baseline')
+    parser.add_argument('--partial', type=float, default=0.3,  help='partial rate')
 
     args = parser.parse_args()
 
@@ -153,13 +154,13 @@ if __name__ == '__main__':
     args.target_labels = {'npp': 0, 'swatooth': 1, 'sin': 2, 'chirp': 3}
 
     # path build
-    log_path = 'results_1019/log/multi_trigger/'
+    log_path = 'results_revision/log/multi_trigger/'
     log_path += f'{args.dataset}/{args.model}/'
     if not os.path.exists(log_path):
         os.makedirs(log_path)
     log_name = log_path + ('baseline_' if args.baseline else 'npp_') + f'{args.a}_{args.f}_{args.p}_{args.pr}.log'
 
-    npz_path = 'results_1019/npz/multi_trigger/'
+    npz_path = 'results_revision/npz/multi_trigger/'
     npz_path += f'{args.dataset}/{args.model}/'
     if not os.path.exists(npz_path):
         os.makedirs(npz_path)
@@ -206,6 +207,7 @@ if __name__ == '__main__':
                                        npp_params,
                                        clean=False,
                                        downsample=False,
+                                       partial=args.partial,
                                        noise_type=noise_type)
                     idx = np.random.permutation(np.arange(len(x_p)))
                     x_poison, y_poison = x_p[idx[:int(args.pr * train_size)]], y_p[idx[:int(args.pr * train_size)]]
@@ -225,6 +227,7 @@ if __name__ == '__main__':
                                            npp_params,
                                            clean=False,
                                            downsample=False,
+                                           partial=args.partial,
                                            noise_type=noise_type)
                 x_test_poison_list.append(x_test_poison)
 

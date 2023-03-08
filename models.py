@@ -16,7 +16,7 @@ def CalculateOutSize(blocks, channels, samples):
     return shape
 
 
-def LoadModel(model_name, n_classes, Chans, Samples):
+def LoadModel(model_name, n_classes, Chans, Samples, spa_frac=None):
     if model_name == 'EEGNet':
         model = EEGNet(n_classes=n_classes,
                        Chans=Chans,
@@ -25,15 +25,44 @@ def LoadModel(model_name, n_classes, Chans, Samples):
                        F1=4,
                        D=2,
                        F2=8,
-                       dropoutRate=0.25)
+                       dropoutRate=0.25,
+                       SAP_frac=spa_frac)
     elif model_name == 'DeepCNN':
         model = DeepConvNet(n_classes=n_classes,
                             Chans=Chans, 
                             Samples=Samples, 
-                            dropoutRate=0.5)
+                            dropoutRate=0.5,
+                            SAP_frac=spa_frac)
     else:
         raise 'No such model'
     return model
+
+
+class SAP(nn.Module):
+    def __init__(self, frac):
+        super(SAP, self).__init__()
+        self.frac = frac
+
+    def forward(self, x):
+        if self.frac is not None:
+            shape = x.shape
+            prob = x.clone().reshape(shape[0], -1)
+
+            select_num = int(self.frac * prob.shape[1])
+
+            prob = torch.abs(prob)
+            prob = prob / torch.sum(prob, dim=1, keepdim=True)
+            idx = torch.multinomial(prob, select_num)
+
+            x = x.reshape(shape[0], -1)
+            # pruned
+            scale_factor = torch.zeros_like(x).to(x.device)
+            selected = torch.gather(prob, dim=1, index=idx)
+            selected = 1.0 / (1.0 - torch.pow(1 - selected, select_num) + 1e-8)
+            scale_factor = torch.scatter(scale_factor, dim=1, index=idx, src=selected)
+            x = scale_factor * x
+            x = x.reshape(shape)
+        return x
 
 
 class EEGNet(nn.Module):
@@ -48,7 +77,8 @@ class EEGNet(nn.Module):
                  F1: int,
                  D: int,
                  F2: int,
-                 dropoutRate: Optional[float] = 0.5):
+                 dropoutRate: Optional[float] = 0.5,
+                 SAP_frac: Optional[float] = None):
         super(EEGNet, self).__init__()
 
         self.n_classes = n_classes
@@ -59,6 +89,7 @@ class EEGNet(nn.Module):
         self.D = D
         self.F2 = F2
         self.dropoutRate = dropoutRate
+        self.SAP_frac = SAP_frac
 
         self.block1 = nn.Sequential(
             nn.ZeroPad2d((self.kernLenght // 2 - 1,
@@ -78,6 +109,7 @@ class EEGNet(nn.Module):
                       bias=False),
             nn.BatchNorm2d(num_features=self.F1 * self.D),
             nn.ELU(),
+            SAP(frac=self.SAP_frac),
             nn.AvgPool2d((1, 4)),
             nn.Dropout(p=self.dropoutRate))
 
@@ -129,30 +161,32 @@ class DeepConvNet(nn.Module):
                  n_classes: int,
                  Chans: int,
                  Samples: int,
-                 dropoutRate: Optional[float] = 0.5):
+                 dropoutRate: Optional[float] = 0.5,
+                 SAP_frac: Optional[float] = None):
         super(DeepConvNet, self).__init__()
 
         self.n_classes = n_classes
         self.Chans = Chans
         self.Samples = Samples
         self.dropoutRate = dropoutRate
+        self.SPA_frac = SAP_frac
 
         self.block1 = nn.Sequential(
             nn.Conv2d(in_channels=1, out_channels=25, kernel_size=(1, 5)),
             nn.Conv2d(in_channels=25, out_channels=25, kernel_size=(Chans, 1)),
-            nn.BatchNorm2d(num_features=25), nn.ELU(),
+            nn.BatchNorm2d(num_features=25), nn.ELU(), SAP(frac=self.SAP_frac),
             nn.MaxPool2d(kernel_size=(1, 2), stride=(1, 2)),
             nn.Dropout(self.dropoutRate))
 
         self.block2 = nn.Sequential(
             nn.Conv2d(in_channels=25, out_channels=50, kernel_size=(1, 5)),
-            nn.BatchNorm2d(num_features=50), nn.ELU(),
+            nn.BatchNorm2d(num_features=50), nn.ELU(), SAP(frac=self.SAP_frac),
             nn.MaxPool2d(kernel_size=(1, 2), stride=(1, 2)),
             nn.Dropout(self.dropoutRate))
 
         self.block3 = nn.Sequential(
             nn.Conv2d(in_channels=50, out_channels=100, kernel_size=(1, 5)),
-            nn.BatchNorm2d(num_features=100), nn.ELU(),
+            nn.BatchNorm2d(num_features=100), nn.ELU(), SAP(frac=self.SAP_frac),
             nn.MaxPool2d(kernel_size=(1, 2), stride=(1, 2)),
             nn.Dropout(self.dropoutRate))
 
